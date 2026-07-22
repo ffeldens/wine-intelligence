@@ -37,6 +37,8 @@ class Wine(Base):
     uva = Column(String(300))
     descricao = Column(Text)
     notas = Column(Text)
+    harmonizacao = Column(Text)          # do catálogo PDF
+    pontuacoes = Column(String(500))     # ratings (James Suckling, Decanter...)
     estoque = Column(Integer, default=0)
     imagem = Column(String(1000))
     link = Column(String(1000))

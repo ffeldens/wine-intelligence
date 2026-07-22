@@ -12,19 +12,31 @@ import logging
 from app.database import SessionLocal, Base, engine, ensure_pgvector
 from app.models.models import Wine
 from app.services.catalog_import import parse_catalog
+from app.services.catalog_pdf import load_pdf_index
 from app.services.enrichment import enrich_wine, embed_wine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("ingest")
 
 
-def run(xlsx_path: str, limit: int | None = None, reembed: bool = False):
+def run(xlsx_path: str, pdf_path: str | None = None, limit: int | None = None, reembed: bool = False):
     ensure_pgvector()
     Base.metadata.create_all(bind=engine)
 
     wines = parse_catalog(xlsx_path)
     if limit:
         wines = wines[:limit]
+
+    # Fichas ricas do catálogo PDF, indexadas por SKU (grounding do enrichment)
+    pdf_blocks: dict = {}
+    if pdf_path:
+        try:
+            pdf_blocks = load_pdf_index(pdf_path)
+            casados = sum(1 for w in wines if w["sku"] in pdf_blocks)
+            logger.info(f"PDF casado por SKU: {casados}/{len(wines)}")
+        except Exception as e:
+            logger.warning(f"Falha ao ler o PDF ({e}); seguindo sem fichas.")
+
     logger.info(f"{len(wines)} vinhos para ingerir")
 
     db = SessionLocal()
@@ -36,7 +48,7 @@ def run(xlsx_path: str, limit: int | None = None, reembed: bool = False):
                 if existing and existing.embedding is not None and not reembed:
                     continue  # já ingerido
 
-                enriched = enrich_wine(w)
+                enriched = enrich_wine(w, pdf_blocks.get(w["sku"]))
                 emb = embed_wine(w, enriched)
 
                 obj = existing or Wine(sku=w["sku"])
@@ -51,6 +63,8 @@ def run(xlsx_path: str, limit: int | None = None, reembed: bool = False):
                 obj.cor = enriched.get("cor")
                 obj.uva = enriched.get("uva")
                 obj.descricao = enriched.get("descricao_rica")
+                obj.harmonizacao = enriched.get("harmonizacao")
+                obj.pontuacoes = enriched.get("pontuacoes")
                 obj.notas = f"Classificação TDP: {w.get('classificacao','')} · Cód.barras: {w.get('codigo_barras','')} · {w.get('embalagem','')}x{w.get('volume','')}"
                 obj.estoque = 1  # planilha não traz estoque real; assume disponível
                 obj.sensory_profile = enriched.get("sensory_profile")
@@ -73,8 +87,9 @@ def run(xlsx_path: str, limit: int | None = None, reembed: bool = False):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("uso: python ingest.py <caminho.xlsx> [--limit N] [--reembed]")
+        print("uso: python ingest.py <catalogo.xlsx> [--pdf ficha.pdf] [--limit N] [--reembed]")
         raise SystemExit(1)
     path = sys.argv[1]
+    pdf = sys.argv[sys.argv.index("--pdf") + 1] if "--pdf" in sys.argv else None
     lim = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
-    run(path, limit=lim, reembed="--reembed" in sys.argv)
+    run(path, pdf_path=pdf, limit=lim, reembed="--reembed" in sys.argv)
