@@ -49,13 +49,14 @@ Retorne este JSON EXATO:
 Apenas o JSON."""
 
 
-def infer_user_profile(preferencias: str, favoritos: list[str] | None = None) -> dict:
-    """Infere o perfil do cliente e o vetor de similaridade (embedding)."""
-    prompt = _prompt(preferencias, favoritos or [])
+def infer_profile_from_llm(system: str, prompt: str, fallback_ideal: str) -> dict:
+    """Núcleo reutilizável: chama o LLM (2 tentativas, temp 0, parse tolerante),
+    normaliza o perfil sensorial e gera o embedding do vinho ideal. Usado tanto
+    pelo perfil do usuário quanto pela harmonização por prato."""
     data, last_err = None, None
     for tentativa in range(2):  # JSON do LLM é não-determinístico → 2 chances
         resp = generate_with_fallback(
-            _SYSTEM, prompt, model=settings.ai_model_anthropic,
+            system, prompt, model=settings.ai_model_anthropic,
             max_tokens=900, temperature=0,
         )
         try:
@@ -71,8 +72,13 @@ def infer_user_profile(preferencias: str, favoritos: list[str] | None = None) ->
     data["sensory_profile"] = {
         k: max(0.0, min(10.0, float(prof.get(k, 5) or 5))) for k in _EIXOS
     }
-    ideal = data.get("vinho_ideal") or preferencias
+    ideal = data.get("vinho_ideal") or fallback_ideal
     perfil_txt = ", ".join(f"{k} {v}" for k, v in data["sensory_profile"].items())
     # Mesmo formato do embedding_text dos vinhos → espaço vetorial coerente
     data["embedding"] = embed_text(f"{ideal}. Perfil sensorial (0-10): {perfil_txt}.")
     return data
+
+
+def infer_user_profile(preferencias: str, favoritos: list[str] | None = None) -> dict:
+    """Infere o perfil do cliente e o vetor de similaridade (embedding)."""
+    return infer_profile_from_llm(_SYSTEM, _prompt(preferencias, favoritos or []), preferencias)

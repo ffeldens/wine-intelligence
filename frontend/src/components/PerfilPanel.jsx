@@ -1,7 +1,8 @@
 import RadarSensorial from './RadarSensorial.jsx'
 
-export default function PerfilPanel({ perfil }) {
+export default function PerfilPanel({ perfil, mode }) {
   if (!perfil) return null
+  const titulo = mode === 'prato' ? 'O que o prato pede' : 'Seu perfil de paladar'
   return (
     <section className="card bg-wine text-cream">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
@@ -9,7 +10,7 @@ export default function PerfilPanel({ perfil }) {
           <RadarSensorial profile={perfil.sensory_profile} size={200} color="#c19a5b" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-wide text-gold">Seu perfil de paladar</p>
+          <p className="text-[11px] uppercase tracking-wide text-gold">{titulo}</p>
           <p className="mt-1 font-serif text-lg leading-snug">{perfil.resumo}</p>
           {perfil.inferencia && (
             <p className="mt-2 inline-block rounded-full bg-cream/10 px-3 py-1 text-sm text-gold">

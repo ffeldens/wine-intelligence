@@ -111,8 +111,9 @@ def _item_pub(c: dict) -> dict:
     }
 
 
-def _justify(perfil: dict, itens: list[dict]) -> None:
-    """Preenche it['justificativa'] com a fala do sommelier (grounded)."""
+def _justify(perfil: dict, itens: list[dict], contexto: str = "paladar") -> None:
+    """Preenche it['justificativa'] com a fala do sommelier (grounded).
+    contexto='paladar' (perfil do cliente) ou 'prato' (harmonização)."""
     if not itens:
         return
     linhas = "\n".join(
@@ -123,16 +124,28 @@ def _justify(perfil: dict, itens: list[dict]) -> None:
         for i, it in enumerate(itens)
     )
     n = len(itens)
-    system = (
-        "Você é o sommelier da TDP Wines. Justifique cada indicação em 1-2 frases, "
-        "conectando o vinho ao paladar do cliente. Use SOMENTE os dados fornecidos "
-        "(não invente notas nem prêmios). Responda em JSON com UMA chave por índice, "
-        "de \"1\" a \"" + str(n) + "\", sem pular nenhuma."
-    )
-    user = (
-        f"Perfil do cliente: {perfil.get('resumo')} ({perfil.get('inferencia')}).\n"
-        f"Vinhos selecionados (justifique TODOS os {n}):\n{linhas}\n\nRetorne só o JSON."
-    )
+    if contexto == "prato":
+        system = (
+            "Você é o sommelier da TDP Wines. Justifique cada indicação em 1-2 frases, "
+            "explicando por que o vinho HARMONIZA com o prato descrito (peso, acidez, "
+            "gordura, tempero). Use SOMENTE os dados fornecidos (não invente notas nem "
+            "prêmios). Responda em JSON com UMA chave por índice, de \"1\" a \"" + str(n) + "\"."
+        )
+        user = (
+            f"Prato a harmonizar: {perfil.get('resumo')}\n"
+            f"Vinhos selecionados (justifique TODOS os {n}):\n{linhas}\n\nRetorne só o JSON."
+        )
+    else:
+        system = (
+            "Você é o sommelier da TDP Wines. Justifique cada indicação em 1-2 frases, "
+            "conectando o vinho ao paladar do cliente. Use SOMENTE os dados fornecidos "
+            "(não invente notas nem prêmios). Responda em JSON com UMA chave por índice, "
+            "de \"1\" a \"" + str(n) + "\", sem pular nenhuma."
+        )
+        user = (
+            f"Perfil do cliente: {perfil.get('resumo')} ({perfil.get('inferencia')}).\n"
+            f"Vinhos selecionados (justifique TODOS os {n}):\n{linhas}\n\nRetorne só o JSON."
+        )
     try:
         resp = generate_with_fallback(system, user, model=settings.ai_model_anthropic, max_tokens=1500)
         just = parse_llm_json(resp.content)
@@ -172,9 +185,12 @@ def _descobertas(leftovers: list[dict], perfil: dict, k: int = 2) -> list[dict]:
 def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None,
               tipo: str | None = None, pais: str | None = None,
               orcamento: float | None = None, qtd: int = 3,
-              objetivo: str | None = None, explicar: bool = True) -> dict:
-    """Recomendação híbrida: retorna perfil inferido + seleção rankeada."""
-    perfil = infer_user_profile(preferencias, favoritos)
+              objetivo: str | None = None, explicar: bool = True,
+              perfil: dict | None = None, contexto: str = "paladar") -> dict:
+    """Recomendação híbrida: retorna perfil inferido + seleção rankeada.
+    perfil pode vir pré-computado (ex.: harmonização por prato)."""
+    if perfil is None:
+        perfil = infer_user_profile(preferencias, favoritos)
     uvec = perfil["embedding"]
     user_prof = perfil.get("sensory_profile")
 
@@ -234,7 +250,7 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
 
     itens = [_item_pub(c) for c in selecionados]
     if explicar:
-        _justify(perfil, itens)
+        _justify(perfil, itens, contexto)
 
     return {
         "perfil_usuario": _perfil_pub(perfil),

@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.models import Wine
 from app.services.recommender import recommend, _wine_pub, ascii_upper
 from app.services.cellar import build_cellar
+from app.services.pairing import pair_with_dish
 
 router = APIRouter()
 
@@ -48,6 +49,23 @@ def post_cellar(req: CellarRequest, db: Session = Depends(get_db)):
         db, preferencias=req.preferencias, favoritos=req.favoritos,
         orcamento_total=req.orcamento_total, garrafas=req.garrafas,
         tipo=req.tipo, pais=req.pais,
+    )
+
+
+class PairingRequest(BaseModel):
+    prato: str = Field(..., description="Prato ou refeição a harmonizar")
+    tipo: str | None = None
+    pais: str | None = None
+    orcamento: float | None = Field(None, description="Teto de preço por garrafa (R$)")
+    qtd: int = Field(3, ge=1, le=8, description="Quantidade de indicações")
+
+
+@router.post("/pairing")
+def post_pairing(req: PairingRequest, db: Session = Depends(get_db)):
+    """Harmonização por prato: o sommelier casa o catálogo com a refeição."""
+    return pair_with_dish(
+        db, prato=req.prato, tipo=req.tipo, pais=req.pais,
+        orcamento=req.orcamento, qtd=req.qtd,
     )
 
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { recommend, cellar } from './api.js'
+import { recommend, cellar, pairing } from './api.js'
 import Wizard from './components/Wizard.jsx'
 import PerfilPanel from './components/PerfilPanel.jsx'
 import WineCard, { brl } from './components/WineCard.jsx'
@@ -16,7 +16,10 @@ export default function App() {
     setData(null)
     setMode(m)
     try {
-      const res = m === 'descoberta' ? await recommend(payload) : await cellar(payload)
+      const res =
+        m === 'descoberta' ? await recommend(payload)
+          : m === 'prato' ? await pairing(payload)
+            : await cellar(payload)
       setData(res)
     } catch (e) {
       setError(e.message || 'Falha ao consultar o sommelier.')
@@ -65,11 +68,11 @@ export default function App() {
 
         {data && !loading && (
           <div className="space-y-6">
-            <PerfilPanel perfil={perfil} />
-            {mode === 'descoberta' ? (
-              <Descoberta data={data} perfil={perfil} />
-            ) : (
+            <PerfilPanel perfil={perfil} mode={mode} />
+            {mode === 'adega' ? (
               <Adega data={data} />
+            ) : (
+              <Descoberta data={data} perfil={perfil} mode={mode} />
             )}
           </div>
         )}
@@ -82,7 +85,8 @@ export default function App() {
   )
 }
 
-function Descoberta({ data, perfil }) {
+function Descoberta({ data, perfil, mode }) {
+  const isPrato = mode === 'prato'
   const sel = data.selecao || []
   const desc = data.descobertas || []
   if (!sel.length) {
@@ -91,7 +95,7 @@ function Descoberta({ data, perfil }) {
   return (
     <>
       <div>
-        <h3 className="mb-3 font-serif text-xl text-ink">Sua seleção</h3>
+        <h3 className="mb-3 font-serif text-xl text-ink">{isPrato ? 'Harmonizações' : 'Sua seleção'}</h3>
         <div className="space-y-4">
           {sel.map((item, i) => (
             <WineCard key={item.wine.id} item={item} rank={i + 1} userProfile={perfil?.sensory_profile} />
@@ -101,9 +105,13 @@ function Descoberta({ data, perfil }) {
 
       {desc.length > 0 && (
         <div>
-          <h3 className="mb-1 font-serif text-xl text-ink">Descobertas inteligentes</h3>
+          <h3 className="mb-1 font-serif text-xl text-ink">
+            {isPrato ? 'Harmonizações surpreendentes' : 'Descobertas inteligentes'}
+          </h3>
           <p className="mb-3 text-sm text-neutral-500">
-            Rótulos fora do que você citou, mas que casam com seu paladar.
+            {isPrato
+              ? 'Rótulos de regiões/uvas inesperadas que também casam com o prato.'
+              : 'Rótulos fora do que você citou, mas que casam com seu paladar.'}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             {desc.map((d) => (

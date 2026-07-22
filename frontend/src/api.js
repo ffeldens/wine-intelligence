@@ -17,4 +17,5 @@ async function post(path, body) {
 
 export const recommend = (body) => post('/recommend', body)
 export const cellar = (body) => post('/cellar', body)
+export const pairing = (body) => post('/pairing', body)
 export const getStats = () => fetch(`${BASE}/api/stats`).then((r) => r.json())
