@@ -37,16 +37,17 @@ services:
     ports:
       - "8004:8000"   # 8001 intel · 8002 gtp · 8003 gtp-gvc → 8004 livre
 
-  # ── Frontend (Vite+React+Tailwind) — adicionado na F4 ──────
-  # frontend:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/Dockerfile.frontend
-  #   container_name: wine-frontend
-  #   restart: unless-stopped
-  #   depends_on: [backend]
-  #   ports:
-  #     - "3004:80"   # frontend (F4) — 3004 livre
+  # ── Frontend (Vite+React+Tailwind → nginx) ─────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: wine-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3004:80"   # Caddy → localhost:3004 (proxy /api → backend na rede interna)
 
 volumes:
   winedata:
