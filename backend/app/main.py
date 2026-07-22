@@ -44,7 +44,6 @@ def health():
     return {"status": "ok", "service": settings.app_name}
 
 
-# Rotas (adicionadas nas próximas fases):
-# from app.api import ingest_routes, recommend_routes
-# app.include_router(ingest_routes.router, prefix="/api")
-# app.include_router(recommend_routes.router, prefix="/api")
+# Rotas
+from app.api import recommend_routes  # noqa: E402
+app.include_router(recommend_routes.router, prefix="/api")
