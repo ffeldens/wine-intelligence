@@ -1,0 +1,51 @@
+services:
+  # ── PostgreSQL + pgvector ──────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: wine-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wine_intelligence
+      POSTGRES_USER: wine
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_this_password}
+    volumes:
+      - winedata:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"   # 5433 já é do salesclub-intel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wine -d wine_intelligence"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: wine-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    environment:
+      DATABASE_URL: postgresql://wine:${DB_PASSWORD:-change_this_password}@db:5432/wine_intelligence
+    ports:
+      - "8002:8000"   # 8001 já é do salesclub-intel
+
+  # ── Frontend (Vite+React+Tailwind) — adicionado na F4 ──────
+  # frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.frontend
+  #   container_name: wine-frontend
+  #   restart: unless-stopped
+  #   depends_on: [backend]
+  #   ports:
+  #     - "3002:80"   # 3001 já é do salesclub-intel
+
+volumes:
+  winedata:
+    driver: local
