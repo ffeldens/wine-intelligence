@@ -24,8 +24,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Pesos do score (algoritmo do PRD)
-W_SENSORIAL, W_PRODUTOR, W_CUSTO, W_ORCAMENTO, W_DIVERSIDADE = 0.40, 0.25, 0.15, 0.10, 0.10
+# Pesos do score. Custo-benefício removido por ora (não penalizar vinhos de
+# maior valor); seu peso foi pro sensorial.
+W_SENSORIAL, W_PRODUTOR, W_ORCAMENTO, W_DIVERSIDADE = 0.55, 0.25, 0.10, 0.10
 CANDIDATOS = 40  # top-K por similaridade que entram no ranqueamento fino
 
 _EIXOS = ["acidez", "corpo", "mineralidade", "madeira", "fruta",
@@ -104,7 +105,6 @@ def _item_pub(c: dict) -> dict:
         "componentes": {
             "sensorial": round(c["sensorial"], 3),
             "produtor": round(c["produtor"], 3),
-            "custo_beneficio": round(c["custo"], 3),
             "orcamento": round(c["orcamento"], 3),
             "diversidade": round(c.get("diversidade", 1.0), 3),
         },
@@ -197,9 +197,6 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
         return {"perfil_usuario": _perfil_pub(perfil), "selecao": [],
                 "aviso": "Nenhum vinho do catálogo casou com o filtro. Afrouxe o orçamento/tipo."}
 
-    precos = [r[0].preco for r in rows if r[0].preco]
-    preco_medio = sum(precos) / len(precos) if precos else 100.0
-
     scored = []
     for wine, dist_val in rows:
         emb_sim = max(0.0, min(1.0, 1.0 - float(dist_val)))  # cosine dist → similaridade
@@ -207,12 +204,10 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
         # embedding (semântico) + eixos sensoriais (crava aversões, ex.: madeira)
         sensorial = emb_sim if ax is None else 0.6 * emb_sim + 0.4 * ax
         produtor = _producer_quality(wine)
-        custo = _cost_benefit(sensorial, wine.preco, preco_medio)
         orc = _budget_fit(wine.preco, orcamento)
-        base = (W_SENSORIAL * sensorial + W_PRODUTOR * produtor
-                + W_CUSTO * custo + W_ORCAMENTO * orc)
+        base = W_SENSORIAL * sensorial + W_PRODUTOR * produtor + W_ORCAMENTO * orc
         scored.append({"wine": wine, "sensorial": sensorial, "produtor": produtor,
-                       "custo": custo, "orcamento": orc, "base": base})
+                       "orcamento": orc, "base": base})
 
     # 3. Seleção gulosa: a diversidade recompensa variar país/tipo/uva já escolhidos
     selecionados: list[dict] = []

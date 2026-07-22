@@ -35,7 +35,7 @@ def post_recommend(req: RecommendRequest, db: Session = Depends(get_db)):
 class CellarRequest(BaseModel):
     preferencias: str = Field(..., description="Preferências livres do cliente")
     favoritos: list[str] | None = None
-    orcamento_total: float = Field(500.0, gt=0, description="Orçamento total da adega (R$)")
+    orcamento_total: float | None = Field(None, description="Orçamento total da adega (R$); vazio = sem teto")
     garrafas: int = Field(6, ge=2, le=24, description="Número de garrafas")
     tipo: str | None = None
     pais: str | None = None

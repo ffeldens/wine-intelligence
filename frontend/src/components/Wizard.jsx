@@ -33,7 +33,7 @@ export default function Wizard({ onSubmit, loading }) {
     if (mode === 'descoberta') {
       onSubmit('descoberta', { ...comum, orcamento: orcamento ? Number(orcamento) : null, qtd: Number(qtd) })
     } else {
-      onSubmit('adega', { ...comum, orcamento_total: orcTotal ? Number(orcTotal) : 500, garrafas: Number(garrafas) })
+      onSubmit('adega', { ...comum, orcamento_total: orcTotal ? Number(orcTotal) : null, garrafas: Number(garrafas) })
     }
   }
 
@@ -123,7 +123,7 @@ export default function Wizard({ onSubmit, loading }) {
           <>
             <div>
               <label className="label">Orçamento total</label>
-              <input className="field" type="number" min="0" placeholder="R$" value={orcTotal} onChange={(e) => setOrcTotal(e.target.value)} />
+              <input className="field" type="number" min="0" placeholder="R$ (vazio = sem teto)" value={orcTotal} onChange={(e) => setOrcTotal(e.target.value)} />
             </div>
             <div>
               <label className="label">Nº de garrafas</label>

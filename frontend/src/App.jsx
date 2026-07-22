@@ -141,15 +141,17 @@ function Adega({ data }) {
         <div className="flex gap-6 text-sm">
           <Stat label="Garrafas" value={`${data.garrafas_selecionadas}/${data.garrafas_alvo}`} />
           <Stat label="Total" value={brl(data.total)} />
-          <Stat label="Orçamento" value={brl(data.orcamento_total)} />
-          <Stat label="Restante" value={brl(data.restante)} />
+          <Stat label="Orçamento" value={data.orcamento_total ? brl(data.orcamento_total) : 'Sem teto'} />
+          {data.orcamento_total != null && <Stat label="Restante" value={brl(data.restante)} />}
         </div>
-        <div className="h-2 w-full max-w-[220px] overflow-hidden rounded-full bg-neutral-100">
-          <div
-            className="h-full rounded-full bg-wine"
-            style={{ width: `${Math.min(100, Math.round((data.total / data.orcamento_total) * 100))}%` }}
-          />
-        </div>
+        {data.orcamento_total != null && (
+          <div className="h-2 w-full max-w-[220px] overflow-hidden rounded-full bg-neutral-100">
+            <div
+              className="h-full rounded-full bg-wine"
+              style={{ width: `${Math.min(100, Math.round((data.total / data.orcamento_total) * 100))}%` }}
+            />
+          </div>
+        )}
       </section>
 
       <div className="space-y-6">

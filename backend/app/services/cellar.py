@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Wine
 from app.services.profile import infer_user_profile
 from app.services.recommender import (
-    _producer_quality, _cost_benefit, _axis_sim, _wine_pub, _perfil_pub, ascii_upper,
+    _producer_quality, _axis_sim, _wine_pub, _perfil_pub, ascii_upper,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,32 +36,34 @@ def _allocate(n: int) -> dict[str, int]:
     return counts
 
 
-def _bucket_score(bucket: str, sensorial: float, produtor: float,
-                  custo: float, wine: Wine) -> float:
+def _bucket_score(bucket: str, sensorial: float, produtor: float, wine: Wine) -> float:
     prof = wine.sensory_profile or {}
     guarda = float(prof.get("guarda", 5)) / 10.0
-    if bucket == "consumo_diario":      # acessível, pronto pra beber
-        return 0.45 * sensorial + 0.35 * custo + 0.20 * (1 - guarda)
+    if bucket == "consumo_diario":      # versátil, pronto pra beber
+        return 0.70 * sensorial + 0.30 * (1 - guarda)
     if bucket == "ocasioes":            # impressiona (produtor/nota)
-        return 0.45 * sensorial + 0.45 * produtor + 0.10 * custo
+        return 0.55 * sensorial + 0.45 * produtor
     if bucket == "guarda":              # estrutura pra envelhecer
-        return 0.45 * sensorial + 0.35 * guarda + 0.20 * produtor
+        return 0.50 * sensorial + 0.30 * guarda + 0.20 * produtor
     if bucket == "experimentacao":      # diverso (fora do radar, tratado na seleção)
-        return 0.60 * sensorial + 0.40 * custo
+        return sensorial
     return sensorial
 
 
 def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = None,
-                 orcamento_total: float = 500.0, garrafas: int = 6,
+                 orcamento_total: float | None = None, garrafas: int = 6,
                  tipo: str | None = None, pais: str | None = None) -> dict:
     perfil = infer_user_profile(preferencias, favoritos)
     uvec = perfil["embedding"]
     user_prof = perfil.get("sensory_profile")
+    cap = orcamento_total if orcamento_total is not None else float("inf")  # sem teto = sem limite
 
     dist = Wine.embedding.cosine_distance(uvec)
     q = select(Wine, dist.label("dist")).where(
-        Wine.embedding.isnot(None), Wine.estoque > 0, Wine.preco <= orcamento_total
+        Wine.embedding.isnot(None), Wine.estoque > 0
     )
+    if orcamento_total is not None:
+        q = q.where(Wine.preco <= orcamento_total)  # só limita quando há teto
     if tipo:
         q = q.where(func.lower(Wine.tipo) == tipo.lower())
     if pais:
@@ -72,9 +74,6 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
         return {"perfil_usuario": _perfil_pub(perfil), "adega": [],
                 "aviso": "Nenhum vinho cabe no orçamento/filtro."}
 
-    precos = [r[0].preco for r in rows if r[0].preco]
-    preco_medio = sum(precos) / len(precos) if precos else 100.0
-
     pool = []
     for wine, dist_val in rows:
         emb = max(0.0, min(1.0, 1.0 - float(dist_val)))
@@ -83,7 +82,6 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
         pool.append({
             "wine": wine, "sensorial": sensorial,
             "produtor": _producer_quality(wine),
-            "custo": _cost_benefit(sensorial, wine.preco, preco_medio),
         })
 
     counts = _allocate(garrafas)
@@ -101,7 +99,7 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
     for key, _frac, label in MIX:
         need = counts[key]
         ranked = sorted(
-            pool, key=lambda c: _bucket_score(key, c["sensorial"], c["produtor"], c["custo"], c["wine"]),
+            pool, key=lambda c: _bucket_score(key, c["sensorial"], c["produtor"], c["wine"]),
             reverse=True,
         )
         picks = []
@@ -110,7 +108,7 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
             if need <= 0:
                 break
             w = c["wine"]
-            if str(w.id) in chosen_ids or total + (w.preco or 0) > orcamento_total:
+            if str(w.id) in chosen_ids or total + (w.preco or 0) > cap:
                 continue
             if key == "experimentacao":
                 pais_l = (w.pais or "").lower()
@@ -126,7 +124,7 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
                 if need <= 0:
                     break
                 w = c["wine"]
-                if str(w.id) in chosen_ids or total + (w.preco or 0) > orcamento_total:
+                if str(w.id) in chosen_ids or total + (w.preco or 0) > cap:
                     continue
                 _take(c)
                 picks.append({"wine": _wine_pub(w), "compatibilidade": round(c["sensorial"] * 100),
@@ -137,9 +135,9 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
 
     return {
         "perfil_usuario": _perfil_pub(perfil),
-        "orcamento_total": orcamento_total,
+        "orcamento_total": orcamento_total,  # None quando não informado
         "total": round(total, 2),
-        "restante": round(orcamento_total - total, 2),
+        "restante": round(orcamento_total - total, 2) if orcamento_total is not None else None,
         "garrafas_alvo": garrafas,
         "garrafas_selecionadas": len(chosen_ids),
         "adega": adega,
