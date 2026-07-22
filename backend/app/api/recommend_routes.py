@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Wine
-from app.services.recommender import recommend, _wine_pub
+from app.services.recommender import recommend, _wine_pub, ascii_upper
 from app.services.cellar import build_cellar
 
 router = APIRouter()
@@ -63,7 +63,7 @@ def list_wines(
     if tipo:
         q = q.where(func.lower(Wine.tipo) == tipo.lower())
     if pais:
-        q = q.where(func.lower(Wine.pais) == pais.lower())
+        q = q.where(func.upper(Wine.pais) == ascii_upper(pais))
     q = q.order_by(Wine.preco.desc()).limit(limit)
     wines = db.execute(q).scalars().all()
     return {"total": len(wines), "wines": [_wine_pub(w) for w in wines]}

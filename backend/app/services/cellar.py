@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Wine
 from app.services.profile import infer_user_profile
 from app.services.recommender import (
-    _producer_quality, _cost_benefit, _axis_sim, _wine_pub, _perfil_pub,
+    _producer_quality, _cost_benefit, _axis_sim, _wine_pub, _perfil_pub, ascii_upper,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def build_cellar(db: Session, preferencias: str, favoritos: list[str] | None = N
     if tipo:
         q = q.where(func.lower(Wine.tipo) == tipo.lower())
     if pais:
-        q = q.where(func.lower(Wine.pais) == pais.lower())
+        q = q.where(func.upper(Wine.pais) == ascii_upper(pais))
     q = q.order_by(dist).limit(80)
     rows = db.execute(q).all()
     if not rows:

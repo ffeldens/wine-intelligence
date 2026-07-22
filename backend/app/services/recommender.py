@@ -12,6 +12,7 @@ Etapas (PRD):
 import re
 import math
 import logging
+import unicodedata
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from app.models.models import Wine
@@ -30,6 +31,13 @@ CANDIDATOS = 40  # top-K por similaridade que entram no ranqueamento fino
 _EIXOS = ["acidez", "corpo", "mineralidade", "madeira", "fruta",
           "persistencia", "complexidade", "guarda"]
 _MAX_DIST = math.sqrt(len(_EIXOS) * 100)  # distância euclidiana máxima nos 8 eixos (0-10)
+
+
+def ascii_upper(s: str) -> str:
+    """Remove acentos e maiúsculiza. O país no DB está ASCII maiúsculo
+    (FRANCA, ITALIA, AFRICA DO SUL…), mas o frontend manda 'França' com cedilha."""
+    nfkd = unicodedata.normalize("NFKD", s or "")
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper().strip()
 
 
 def _axis_sim(user_prof: dict | None, wine_prof: dict | None) -> float | None:
@@ -178,7 +186,7 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
     if tipo:
         q = q.where(func.lower(Wine.tipo) == tipo.lower())
     if pais:
-        q = q.where(func.lower(Wine.pais) == pais.lower())
+        q = q.where(func.upper(Wine.pais) == ascii_upper(pais))
     if orcamento:
         q = q.where(Wine.preco <= orcamento * 1.25)  # margem p/ upsell próximo
 
