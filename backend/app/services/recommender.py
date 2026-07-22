@@ -11,6 +11,7 @@ Etapas (PRD):
 
 import json
 import re
+import math
 import logging
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -25,6 +26,19 @@ settings = get_settings()
 # Pesos do score (algoritmo do PRD)
 W_SENSORIAL, W_PRODUTOR, W_CUSTO, W_ORCAMENTO, W_DIVERSIDADE = 0.40, 0.25, 0.15, 0.10, 0.10
 CANDIDATOS = 40  # top-K por similaridade que entram no ranqueamento fino
+
+_EIXOS = ["acidez", "corpo", "mineralidade", "madeira", "fruta",
+          "persistencia", "complexidade", "guarda"]
+_MAX_DIST = math.sqrt(len(_EIXOS) * 100)  # distância euclidiana máxima nos 8 eixos (0-10)
+
+
+def _axis_sim(user_prof: dict | None, wine_prof: dict | None) -> float | None:
+    """Similaridade direta entre os 8 eixos sensoriais (0..1). Faz a aversão a
+    um eixo específico (ex.: madeira) morder o score, além do embedding."""
+    if not user_prof or not wine_prof:
+        return None
+    d2 = sum((float(user_prof.get(k, 5)) - float(wine_prof.get(k, 5))) ** 2 for k in _EIXOS)
+    return max(0.0, 1.0 - math.sqrt(d2) / _MAX_DIST)
 
 
 def _producer_quality(w: Wine) -> float:
@@ -100,17 +114,19 @@ def _justify(perfil: dict, itens: list[dict]) -> None:
         f"harmoniza: {(it['wine']['harmonizacao'] or '')[:160]} · rating: {it['wine']['pontuacoes'] or '-'}"
         for i, it in enumerate(itens)
     )
+    n = len(itens)
     system = (
         "Você é o sommelier da TDP Wines. Justifique cada indicação em 1-2 frases, "
         "conectando o vinho ao paladar do cliente. Use SOMENTE os dados fornecidos "
-        "(não invente notas nem prêmios). Responda em JSON: {\"1\":\"...\",\"2\":\"...\"}."
+        "(não invente notas nem prêmios). Responda em JSON com UMA chave por índice, "
+        "de \"1\" a \"" + str(n) + "\", sem pular nenhuma."
     )
     user = (
         f"Perfil do cliente: {perfil.get('resumo')} ({perfil.get('inferencia')}).\n"
-        f"Vinhos selecionados:\n{linhas}\n\nRetorne só o JSON."
+        f"Vinhos selecionados (justifique TODOS os {n}):\n{linhas}\n\nRetorne só o JSON."
     )
     try:
-        resp = generate_with_fallback(system, user, model=settings.ai_model_anthropic, max_tokens=800)
+        resp = generate_with_fallback(system, user, model=settings.ai_model_anthropic, max_tokens=1500)
         m = re.search(r"\{.*\}", resp.content, re.S)
         just = json.loads(m.group(0)) if m else {}
         for i, it in enumerate(itens):
@@ -128,6 +144,7 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
     """Recomendação híbrida: retorna perfil inferido + seleção rankeada."""
     perfil = infer_user_profile(preferencias, favoritos)
     uvec = perfil["embedding"]
+    user_prof = perfil.get("sensory_profile")
 
     # 1. Filtro estruturado
     dist = Wine.embedding.cosine_distance(uvec)
@@ -153,7 +170,10 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
 
     scored = []
     for wine, dist_val in rows:
-        sensorial = max(0.0, min(1.0, 1.0 - float(dist_val)))  # cosine dist → similaridade
+        emb_sim = max(0.0, min(1.0, 1.0 - float(dist_val)))  # cosine dist → similaridade
+        ax = _axis_sim(user_prof, wine.sensory_profile)
+        # embedding (semântico) + eixos sensoriais (crava aversões, ex.: madeira)
+        sensorial = emb_sim if ax is None else 0.6 * emb_sim + 0.4 * ax
         produtor = _producer_quality(wine)
         custo = _cost_benefit(sensorial, wine.preco, preco_medio)
         orc = _budget_fit(wine.preco, orcamento)
