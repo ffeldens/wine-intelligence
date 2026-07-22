@@ -10,11 +10,10 @@ A descrição do vinho ideal é embeddada (OpenAI) → vetor do usuário, compar
 por similaridade (pgvector) contra os embeddings dos vinhos do catálogo.
 """
 
-import json
-import re
 import logging
 from app.services.ai_provider import generate_with_fallback
 from app.services.embeddings import embed_text
+from app.services.json_utils import parse_llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -52,13 +51,21 @@ Apenas o JSON."""
 
 def infer_user_profile(preferencias: str, favoritos: list[str] | None = None) -> dict:
     """Infere o perfil do cliente e o vetor de similaridade (embedding)."""
-    resp = generate_with_fallback(
-        _SYSTEM, _prompt(preferencias, favoritos or []),
-        model=settings.ai_model_anthropic, max_tokens=900,
-    )
-    content = resp.content.strip()
-    m = re.search(r"\{.*\}", content, re.S)
-    data = json.loads(m.group(0) if m else content)
+    prompt = _prompt(preferencias, favoritos or [])
+    data, last_err = None, None
+    for tentativa in range(2):  # JSON do LLM é não-determinístico → 2 chances
+        resp = generate_with_fallback(
+            _SYSTEM, prompt, model=settings.ai_model_anthropic,
+            max_tokens=900, temperature=0,
+        )
+        try:
+            data = parse_llm_json(resp.content)
+            break
+        except ValueError as e:
+            last_err = e
+            logger.warning(f"Perfil: JSON inválido (tentativa {tentativa + 1}): {e}")
+    if data is None:
+        raise ValueError(f"Não consegui inferir o perfil (JSON inválido do LLM): {last_err}")
 
     prof = data.get("sensory_profile", {}) or {}
     data["sensory_profile"] = {

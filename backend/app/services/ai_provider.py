@@ -24,16 +24,19 @@ class AIResponse:
 
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=10))
 def _call_anthropic(system_prompt: str, user_prompt: str, model: str | None = None,
-                    max_tokens: int = 8000) -> AIResponse:
+                    max_tokens: int = 8000, temperature: float | None = None) -> AIResponse:
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    response = client.messages.create(
+    kwargs = dict(
         model=model or settings.ai_model_anthropic,
         max_tokens=max_tokens,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    response = client.messages.create(**kwargs)
 
     text_parts = [
         (getattr(b, "text", "") or "")
@@ -56,11 +59,12 @@ def _call_anthropic(system_prompt: str, user_prompt: str, model: str | None = No
 
 
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=10))
-def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -> AIResponse:
+def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 8000,
+                 temperature: float | None = None) -> AIResponse:
     from openai import OpenAI
 
     client = OpenAI(api_key=settings.openai_api_key)
-    response = client.chat.completions.create(
+    kwargs = dict(
         model=settings.ai_model_openai,
         max_tokens=max_tokens,
         messages=[
@@ -68,6 +72,9 @@ def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -
             {"role": "user", "content": user_prompt},
         ],
     )
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    response = client.chat.completions.create(**kwargs)
     content = response.choices[0].message.content
     if not content:
         raise ValueError("OpenAI response has no content")
@@ -82,20 +89,21 @@ def _call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -
 
 
 def generate_with_fallback(system_prompt: str, user_prompt: str,
-                           model: str | None = None, max_tokens: int = 8000) -> AIResponse:
+                           model: str | None = None, max_tokens: int = 8000,
+                           temperature: float | None = None) -> AIResponse:
     """Chama o provedor primário; cai pro secundário em falha."""
     primary = settings.ai_primary_provider
     try:
         if primary == "anthropic":
-            return _call_anthropic(system_prompt, user_prompt, model=model, max_tokens=max_tokens)
-        return _call_openai(system_prompt, user_prompt, max_tokens=max_tokens)
+            return _call_anthropic(system_prompt, user_prompt, model=model, max_tokens=max_tokens, temperature=temperature)
+        return _call_openai(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature)
     except Exception as e:
         logger.warning(f"Provedor primário ({primary}) falhou: {e}. Tentando fallback...")
 
     try:
         if primary == "anthropic":
-            return _call_openai(system_prompt, user_prompt, max_tokens=max_tokens)
-        return _call_anthropic(system_prompt, user_prompt, model=model, max_tokens=max_tokens)
+            return _call_openai(system_prompt, user_prompt, max_tokens=max_tokens, temperature=temperature)
+        return _call_anthropic(system_prompt, user_prompt, model=model, max_tokens=max_tokens, temperature=temperature)
     except Exception as e:
         logger.error(f"Ambos os provedores falharam: {e}")
         raise RuntimeError(f"Falha em ambos os provedores de IA: {e}")

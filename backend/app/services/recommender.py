@@ -9,7 +9,6 @@ Etapas (PRD):
      do sommelier (LLM) ancorada nos dados reais do vinho.
 """
 
-import json
 import re
 import math
 import logging
@@ -18,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.models import Wine
 from app.services.profile import infer_user_profile
 from app.services.ai_provider import generate_with_fallback
+from app.services.json_utils import parse_llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -127,8 +127,7 @@ def _justify(perfil: dict, itens: list[dict]) -> None:
     )
     try:
         resp = generate_with_fallback(system, user, model=settings.ai_model_anthropic, max_tokens=1500)
-        m = re.search(r"\{.*\}", resp.content, re.S)
-        just = json.loads(m.group(0)) if m else {}
+        just = parse_llm_json(resp.content)
         for i, it in enumerate(itens):
             it["justificativa"] = just.get(str(i + 1), "")
     except Exception as e:

@@ -7,11 +7,10 @@ notas reais de degustação. Sem ficha, infere da descrição codificada do xlsx
 Modelo barato (Haiku) para rodar nos 161 vinhos com baixo custo.
 """
 
-import json
-import re
 import logging
 from app.services.ai_provider import generate_with_fallback
 from app.services.embeddings import embed_text
+from app.services.json_utils import parse_llm_json
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -51,11 +50,9 @@ Perfil ancorado nas notas reais (ou na typicidade da uva/região). Apenas o JSON
 def enrich_wine(w: dict, pdf_block: str | None = None) -> dict:
     resp = generate_with_fallback(
         _SYSTEM, _build_prompt(w, pdf_block),
-        model=settings.ai_model_anthropic_cheap, max_tokens=900,
+        model=settings.ai_model_anthropic_cheap, max_tokens=900, temperature=0,
     )
-    content = resp.content.strip()
-    m = re.search(r"\{.*\}", content, re.S)
-    data = json.loads(m.group(0) if m else content)
+    data = parse_llm_json(resp.content)
     prof = data.get("sensory_profile", {}) or {}
     eixos = ["acidez", "corpo", "mineralidade", "madeira", "fruta",
              "persistencia", "complexidade", "guarda"]
