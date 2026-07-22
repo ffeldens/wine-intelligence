@@ -32,6 +32,8 @@ services:
       - backend/.env
     environment:
       DATABASE_URL: postgresql://wine:${DB_PASSWORD:-change_this_password}@db:5432/wine_intelligence
+    volumes:
+      - ./data:/app/data   # coloque aqui o xlsx + PDF do catálogo p/ a ingestão
     ports:
       - "8002:8000"   # 8001 já é do salesclub-intel
 
