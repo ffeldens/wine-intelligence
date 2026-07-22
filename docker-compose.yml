@@ -35,7 +35,7 @@ services:
     volumes:
       - ./data:/app/data   # coloque aqui o xlsx + PDF do catálogo p/ a ingestão
     ports:
-      - "8002:8000"   # 8001 já é do salesclub-intel
+      - "8004:8000"   # 8001 intel · 8002 gtp · 8003 gtp-gvc → 8004 livre
 
   # ── Frontend (Vite+React+Tailwind) — adicionado na F4 ──────
   # frontend:
@@ -46,7 +46,7 @@ services:
   #   restart: unless-stopped
   #   depends_on: [backend]
   #   ports:
-  #     - "3002:80"   # 3001 já é do salesclub-intel
+  #     - "3004:80"   # frontend (F4) — 3004 livre
 
 volumes:
   winedata:
