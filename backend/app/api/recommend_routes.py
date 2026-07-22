@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Wine
 from app.services.recommender import recommend, _wine_pub
+from app.services.cellar import build_cellar
 
 router = APIRouter()
 
@@ -28,6 +29,25 @@ def post_recommend(req: RecommendRequest, db: Session = Depends(get_db)):
         db, preferencias=req.preferencias, favoritos=req.favoritos,
         tipo=req.tipo, pais=req.pais, orcamento=req.orcamento,
         qtd=req.qtd, objetivo=req.objetivo,
+    )
+
+
+class CellarRequest(BaseModel):
+    preferencias: str = Field(..., description="Preferências livres do cliente")
+    favoritos: list[str] | None = None
+    orcamento_total: float = Field(500.0, gt=0, description="Orçamento total da adega (R$)")
+    garrafas: int = Field(6, ge=2, le=24, description="Número de garrafas")
+    tipo: str | None = None
+    pais: str | None = None
+
+
+@router.post("/cellar")
+def post_cellar(req: CellarRequest, db: Session = Depends(get_db)):
+    """Adega pessoal: N garrafas por objetivo (40/30/20/10) dentro do orçamento."""
+    return build_cellar(
+        db, preferencias=req.preferencias, favoritos=req.favoritos,
+        orcamento_total=req.orcamento_total, garrafas=req.garrafas,
+        tipo=req.tipo, pais=req.pais,
     )
 
 

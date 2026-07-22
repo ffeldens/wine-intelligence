@@ -137,6 +137,31 @@ def _justify(perfil: dict, itens: list[dict]) -> None:
             it.setdefault("justificativa", "")
 
 
+def _descobertas(leftovers: list[dict], perfil: dict, k: int = 2) -> list[dict]:
+    """Rótulos que o cliente NÃO citou (país/uva fora do radar) mas casam com o
+    paladar — o diferencial "descoberta inteligente" do PRD."""
+    mencionado = (" ".join(perfil.get("regioes_ou_uvas") or [])).lower()
+    cand: list[tuple[dict, str]] = []
+    for c in leftovers:
+        w = c["wine"]
+        pais = (w.pais or "").lower()
+        primeira_uva = (w.uva or "").split(",")[0].lower().strip()
+        pais_novo = bool(pais) and pais not in mencionado
+        uva_nova = bool(primeira_uva) and primeira_uva not in mencionado
+        if pais_novo or uva_nova:
+            motivo = (w.pais or "").title() if pais_novo else (w.uva or "").split(",")[0].strip()
+            cand.append((c, motivo))
+    cand.sort(key=lambda t: t[0]["sensorial"], reverse=True)
+    return [
+        {
+            "wine": _wine_pub(c["wine"]),
+            "compatibilidade": round(c["sensorial"] * 100),
+            "motivo": f"Fora do seu radar ({motivo}), mas casa com seu paladar.",
+        }
+        for c, motivo in cand[:k]
+    ]
+
+
 def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None,
               tipo: str | None = None, pais: str | None = None,
               orcamento: float | None = None, qtd: int = 3,
@@ -209,4 +234,8 @@ def recommend(db: Session, preferencias: str, favoritos: list[str] | None = None
     if explicar:
         _justify(perfil, itens)
 
-    return {"perfil_usuario": _perfil_pub(perfil), "selecao": itens}
+    return {
+        "perfil_usuario": _perfil_pub(perfil),
+        "selecao": itens,
+        "descobertas": _descobertas(scored, perfil),  # scored = candidatos não escolhidos
+    }
